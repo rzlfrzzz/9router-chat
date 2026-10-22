@@ -15,6 +15,7 @@ export default function App() {
   const [conversations, setConversations] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  const [capability, setCapability] = useState(null);
   const deletedRef = useRef(new Set());
   const savedRef = useRef(new Map());
   const saveQueue = useRef(Promise.resolve());
@@ -52,6 +53,16 @@ export default function App() {
   }, []);
 
   useEffect(() => { saveModel(model); }, [model]);
+  useEffect(() => {
+    setCapability(null);
+    if (!model.trim()) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      fetch('/api/model-capabilities', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-9Router-Client': 'chat' }, body: JSON.stringify({ model }), signal: controller.signal })
+        .then((res) => res.json()).then(setCapability).catch(() => {});
+    }, 1200);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [model]);
 
   useEffect(() => {
     getConversations().then((items) => {
@@ -85,13 +96,14 @@ export default function App() {
 
   // Inti: jalankan permintaan untuk riwayat yang diberikan, lalu stream jawabannya
   const run = useCallback(async (convId, history) => {
-    const asst = { id: uid(), role: 'assistant', content: '', createdAt: Date.now() };
+    const asst = { id: uid(), role: 'assistant', content: '', steps: [], createdAt: Date.now() };
     patchConv(convId, (c) => ({ ...c, messages: [...history, asst], updatedAt: Date.now() }));
 
     const controller = new AbortController();
     abortRef.current = controller;
     setBusy(true);
     let acc = '';
+    let steps = [];
     try {
       await streamAgent({
         conversationId: convId,
@@ -102,6 +114,14 @@ export default function App() {
         onEvent: (event) => {
           if (event.type === 'text') { acc += event.text; patchMsg(convId, asst.id, { content: acc }); }
           if (event.type === 'tool_start') setNotice(`Agent menjalankan ${event.name}...`);
+          if (event.type === 'tool_start') {
+            steps = [...steps, { id: event.id, name: event.name, status: 'running' }];
+            patchMsg(convId, asst.id, { steps });
+          }
+          if (event.type === 'tool_result') {
+            steps = steps.map((step) => step.id === event.id ? { ...step, status: event.ok ? 'success' : 'error', summary: String(event.error || (typeof event.result === 'string' ? event.result : JSON.stringify(event.result ?? event.excerpt ?? 'Selesai'))).slice(0, 1500) } : step);
+            patchMsg(convId, asst.id, { steps });
+          }
           if (event.type === 'tool_result') setNotice(event.ok ? `Tool ${event.name} selesai.` : `Tool ${event.name}: ${event.error}`);
           if (event.type === 'file') setNotice('File dibuat. Periksa preview untuk menyetujui atau menolak.');
         },
@@ -114,6 +134,8 @@ export default function App() {
         patchMsg(convId, asst.id, { content: acc, error: err.message || 'Terjadi kesalahan tak dikenal.' });
       }
     } finally {
+      steps = steps.map((step) => step.status === 'running' ? { ...step, status: 'error', summary: 'Proses dihentikan sebelum selesai.' } : step);
+      patchMsg(convId, asst.id, { steps });
       abortRef.current = null;
       setBusy(false);
     }
@@ -210,6 +232,7 @@ export default function App() {
             <button onClick={() => setNotice('')} aria-label="Tutup"><XIcon width={16} height={16} /></button>
           </div>
         )}
+        {capability?.warning && <div role="status" className="border-b border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">{capability.warning} <button className="underline" onClick={() => setWorkspace('excel')}>Buka Excel fallback</button></div>}
 
         {workspace === 'excel' ? <ExcelWorkspace model={model} /> : <>
           <MessageList messages={active?.messages || []} busy={busy} onRetry={retry} />

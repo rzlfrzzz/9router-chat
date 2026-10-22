@@ -1,5 +1,17 @@
 # Workspace agent
 
+## Extended workflow
+
+Image now includes LibreOffice, matplotlib, python-docx, python-pptx, pypdf and markitdown. Rebuild the image before enabling Python. The container runner recalculates formula-containing XLSX, checks cached error cells and rejects external workbook links. Unsupported LibreOffice formulas may fail; recalculation is not proof of business correctness. Total container runtime remains 30 seconds, including verification.
+
+Approved artifacts are copied into a fresh read-only `/workspace/previous` mount each run. Skills are mounted unchanged at `/skills`; `read_skill` loads an allowlisted SKILL.md, with relevant instructions included automatically. Do not install packages from within the offline sandbox.
+
+Every agent request includes a fresh file inventory with IDs and mounted paths. Set `sourceFileId` for workbook revisions; server independently computes a limited XLSX cell/formula/basic-style diff before registering the pending artifact. Samples contain up to 100 changes. Charts, pivot structures and other complex features are not exhaustively compared. Non-XLSX output still requires manual review. The source is selected by the agent and should be checked in the preview.
+
+Tool result context is capped near 10,000 characters with a truncation hint. Tool lifecycle cards are saved with assistant messages in SQLite. Model selection triggers a cached capability probe (one model call, potentially billable); a successful function call does not guarantee streaming compatibility. Inconclusive/failed probes show a warning and link to the local Excel fallback.
+
+Docker build was blocked by socket permissions in the development environment. ENABLE_PYTHON_SANDBOX remains false until the administrator builds and tests the new image. No permission escalation or host-Python fallback is performed.
+
 Requires Node 22.13+ for built-in SQLite. Node 22 may show an experimental warning.
 
 ## API

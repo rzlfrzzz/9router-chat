@@ -66,7 +66,7 @@ export async function runAgent({ messages, model, tools, complete, onEvent = () 
         const toolSignal = AbortSignal.any([signal, AbortSignal.timeout(toolTimeoutMs)]);
         result = await bounded(() => tool.execute(args, { signal: toolSignal }), toolSignal);
         result = JSON.stringify({ ok: true, result });
-        if (result.length > 200000) throw new Error('Hasil tool terlalu besar.');
+        if (result.length > 10000) result = JSON.stringify({ ok: true, truncated: true, excerpt: result.slice(0, 8500), hint: 'Hasil dipotong. Gunakan head(), daftar sheet, atau baca per rentang; jangan cetak seluruh tabel.' });
       } catch (error) {
         signal.throwIfAborted();
         result = JSON.stringify({ ok: false, error: error.name === 'TimeoutError' ? 'Tool timeout.' : String(error.message || 'Tool gagal.').slice(0, 1000) });

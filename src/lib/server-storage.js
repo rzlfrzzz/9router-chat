@@ -3,7 +3,15 @@ async function request(url, options = {}) {
   if (!response.ok) throw new Error((await response.json().catch(() => null))?.error?.message || 'Gagal mengakses penyimpanan server.');
   return response.json();
 }
-export const getConversations = () => request('/api/conversations');
+export async function getConversations() {
+  for (let attempt = 0; ; attempt++) {
+    try { return await request('/api/conversations'); }
+    catch (error) {
+      if (attempt >= 9) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+  }
+}
 export const putConversation = (conversation) => request(`/api/conversations/${conversation.id}`, { method: 'PUT', body: JSON.stringify(conversation) });
 export const deleteConversation = (id) => request(`/api/conversations/${id}`, { method: 'DELETE' });
 export const getFiles = (id) => request(`/api/conversations/${id}/files`);

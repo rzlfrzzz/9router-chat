@@ -53,6 +53,7 @@ function Message({ m, streaming, canRetry, onRetry }) {
           </div>
         ) : (
           <div>
+            {m.steps?.length > 0 && <div className="mb-3 space-y-2">{m.steps.map((step, index) => <details key={`${step.id}-${index}`} className="rounded-lg border border-zinc-300 p-2 text-sm dark:border-zinc-700"><summary className="cursor-pointer">{step.status === 'success' ? '[OK]' : step.status === 'error' ? '[!]' : '[...]'} {step.name === 'run_python' ? 'Menjalankan Python / memproses dokumen' : step.name === 'list_files' ? 'Memeriksa file workspace' : step.name === 'read_skill' ? 'Membaca panduan dokumen' : step.name} — {step.status === 'running' ? 'Berjalan' : step.status === 'success' ? 'Selesai' : 'Gagal'}</summary>{step.summary && <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs">{step.summary}</pre>}</details>)}</div>}
             {m.content ? (
               <div className={`md break-words ${streaming ? 'cursor' : ''}`}>
                 <ReactMarkdown

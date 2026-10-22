@@ -8,7 +8,10 @@ import { AgentError, runAgent } from './agent.js';
 import { workspaceTools } from './tools.js';
 import { createWorkspace } from './workspace.js';
 import { collectCompletion } from './stream.js';
-import { AGENT_PROMPT } from './prompt.js';
+import { AGENT_PROMPT, WORKFLOW_PROMPT } from './prompt.js';
+import { skillContext } from './skills.js';
+import { probeTools } from './capabilities.js';
+import { validatePostContentType } from './content-type.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -29,14 +32,25 @@ app.use('/api', (req, res, next) => {
       (req.method === 'POST' && req.get('x-9router-client') !== 'chat')) {
     return sendError(res, 403, 'Akses proxy hanya diizinkan dari aplikasi lokal.', 'forbidden');
   }
-  if (req.method === 'POST' && !req.is('application/json')) {
-    return sendError(res, 415, 'Gunakan Content-Type application/json.', 'bad_content_type');
-  }
   next();
 });
+app.use('/api', validatePostContentType);
 app.use(express.json({ limit: '60mb' }));
 const workspace = createWorkspace(path.join(__dirname, '..', 'workspaces'));
 app.use('/api', workspace.router);
+const capabilities = new Map();
+app.post('/api/model-capabilities', async (req, res) => {
+  const model = req.body?.model;
+  if (typeof model !== 'string' || !model.trim() || model.length > 200) return sendError(res, 400, 'Model tidak valid.', 'bad_model');
+  try {
+    let entry = capabilities.get(model);
+    if (!entry || entry.expires < Date.now()) {
+      const result = await probeTools({ model, baseUrl: BASE_URL, headers: upstreamHeaders(), signal: AbortSignal.timeout(20000) });
+      entry = { result, expires: Date.now() + 300000 }; capabilities.set(model, entry);
+    }
+    res.json(entry.result);
+  } catch { res.json({ supported: null, warning: 'Kemampuan tools belum dapat diperiksa. Probe memakai satu panggilan model.' }); }
+});
 
 const upstreamHeaders = () => ({
   'Content-Type': 'application/json',
@@ -96,7 +110,7 @@ app.post('/api/agent', async (req, res) => {
     heartbeat = setInterval(() => { if (!res.destroyed) res.write(': heartbeat\n\n'); }, 15000);
     const result = await runAgent({
       model,
-      messages: [{ role: 'system', content: AGENT_PROMPT }, ...messages.filter((m) => m.role !== 'system').map(({ role, content }) => ({ role, content }))],
+      messages: [{ role: 'system', content: `${AGENT_PROMPT}\n${WORKFLOW_PROMPT}\n${skillContext(messages)}\nDaftar file workspace terbaru:\n${JSON.stringify(workspace.listFiles(req.body.conversationId).map(({ id, name, kind, status }) => ({ id, name, kind, status, path: kind === 'uploads' ? `/workspace/uploads/${name}` : status === 'approved' ? `/workspace/previous/${name}` : '(menunggu persetujuan/tidak tersedia)' }))).slice(0, 16000)}` }, ...messages.filter((m) => m.role !== 'system').map(({ role, content }) => ({ role, content }))],
       tools: workspaceTools(workspace, req.body.conversationId, onEvent),
       onEvent,
       signal,
@@ -109,7 +123,7 @@ app.post('/api/agent', async (req, res) => {
         });
         if (!upstream.ok) {
           await upstream.body?.cancel();
-          throw new AgentError(`9Router menolak permintaan agent (HTTP ${upstream.status}).`, 'upstream_error', upstream.status);
+          throw new AgentError(`9Router menolak permintaan agent (HTTP ${upstream.status}).${[400, 422].includes(upstream.status) ? ' Model/provider mungkin tidak mendukung streaming tools. Pilih model lain atau gunakan panel Excel (JSON edit).' : ''}`, 'upstream_error', upstream.status);
         }
         return collectCompletion(upstream, onEvent);
       },

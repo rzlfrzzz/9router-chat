@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 
-export function runSandbox({ code, uploads, outputs, signal }) {
+export function runSandbox({ code, uploads, outputs, previous, signal }) {
   if (typeof code !== 'string' || code.length > 50000) throw new Error('Kode maksimal 50.000 karakter.');
   if (process.env.ENABLE_PYTHON_SANDBOX !== 'true') throw new Error('Sandbox Python dinonaktifkan. Administrator harus menyediakan Docker dan image terlebih dahulu.');
   const name = `9router-${randomUUID()}`;
@@ -12,7 +13,9 @@ export function runSandbox({ code, uploads, outputs, signal }) {
       '--tmpfs=/tmp:rw,noexec,nosuid,size=64m',
       '--mount', `type=bind,source=${uploads},target=/workspace/uploads,readonly`,
       '--mount', `type=bind,source=${outputs},target=/workspace/outputs`,
-      '--workdir=/workspace', '-i', process.env.PYTHON_SANDBOX_IMAGE || '9router-python:local', 'python', '-I', '-'],
+      '--mount', `type=bind,source=${previous},target=/workspace/previous,readonly`,
+      '--mount', `type=bind,source=${path.resolve('skills')},target=/skills,readonly`,
+      '--workdir=/workspace', '-i', process.env.PYTHON_SANDBOX_IMAGE || '9router-python:local', 'python', '-I', '/opt/sandbox-runner.py'],
     { stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '', stderr = '', overflow = false;
     const kill = () => {

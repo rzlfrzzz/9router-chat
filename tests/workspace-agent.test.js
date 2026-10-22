@@ -7,6 +7,7 @@ import { createWorkspace } from '../server/workspace.js';
 import { collectCompletion } from '../server/stream.js';
 import express from 'express';
 import { once } from 'node:events';
+import { validatePostContentType } from '../server/content-type.js';
 
 test('stream assembles fragmented tool names/arguments by index', async () => {
   const frames = [
@@ -37,13 +38,15 @@ test('SQLite roundtrip, workspace path containment and pending outputs', () => {
 test('multipart upload and output download approval gate', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), '9router-http-'));
   const workspace = createWorkspace(root);
-  const app = express(); app.use(express.json()); app.use('/api', workspace.router);
+  const app = express(); app.use('/api', validatePostContentType); app.use(express.json()); app.use('/api', workspace.router);
   const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
   const base = `http://127.0.0.1:${server.address().port}/api/conversations/conv1`;
   try {
     const form = new FormData(); form.append('files', new Blob(['test']), 'report.txt');
     const uploaded = await fetch(`${base}/uploads`, { method: 'POST', body: form });
     assert.equal(uploaded.status, 200);
+    assert.equal((await fetch(`${base}/uploads`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 415);
+    assert.equal((await fetch(`${base}/files/unknown/approval`, { method: 'POST', body: new FormData() })).status, 415);
     assert.equal((await uploaded.json())[0].originalName, 'report.txt');
     fs.writeFileSync(path.join(workspace.folder('conv1', 'outputs'), 'new.txt'), 'changed');
     const artifact = workspace.register('conv1', 'new.txt', 'outputs', 'changed values');
