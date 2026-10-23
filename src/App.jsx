@@ -4,7 +4,7 @@ import MessageList from './components/MessageList.jsx';
 import Composer from './components/Composer.jsx';
 import ExcelWorkspace from './components/ExcelWorkspace.jsx';
 import WorkspaceFiles from './components/WorkspaceFiles.jsx';
-import { MenuIcon, MoonIcon, SunIcon, XIcon } from './components/Icons.jsx';
+import { AlertIcon, MenuIcon, ModelIcon, XIcon } from './components/Icons.jsx';
 import { loadModel, saveModel } from './lib/storage.js';
 import { getConversations, putConversation, deleteConversation, uploadFiles, streamAgent } from './lib/server-storage.js';
 import { fetchModels } from './lib/api.js';
@@ -25,6 +25,7 @@ export default function App() {
   const [models, setModels] = useState([]);
   const [notice, setNotice] = useState('');
   const [workspace, setWorkspace] = useState('chat');
+  const [seed, setSeed] = useState(null);
   const [theme, setTheme] = useState(() => {
     try {
       return localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -187,57 +188,65 @@ export default function App() {
     if (id === activeId) setActiveId(conversations.find((c) => c.id !== id)?.id ?? null);
   };
 
+  const noticeBar = 'mx-3 mt-3 flex items-start gap-2.5 rounded-xl bg-signal-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-signal-ink sm:mx-5';
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <div className="flex h-dvh overflow-hidden bg-frame md:p-3">
       <Sidebar
         conversations={conversations}
         activeId={activeId}
         open={sidebarOpen}
+        workspace={workspace}
+        busy={busy}
+        theme={theme}
+        onWorkspace={(w) => { setWorkspace(w); setSidebarOpen(false); }}
+        onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         onClose={() => setSidebarOpen(false)}
-        onNew={() => { if (!busy) setActiveId(null); setSidebarOpen(false); }}
-        onSelect={(id) => { if (!busy) { setActiveId(id); setSidebarOpen(false); } }}
+        onNew={() => { if (!busy) { setActiveId(null); setWorkspace('chat'); } setSidebarOpen(false); }}
+        onSelect={(id) => { if (!busy) { setActiveId(id); setWorkspace('chat'); setSidebarOpen(false); } }}
         onDelete={remove}
       />
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
-          <button onClick={() => setSidebarOpen(true)} className="rounded-lg p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 md:hidden" aria-label="Buka menu">
+      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-sheet md:rounded-[1.75rem] md:border md:border-line md:shadow-sheet">
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line px-3 sm:px-5">
+          <button onClick={() => setSidebarOpen(true)} className="-ml-1 rounded-lg p-2 text-ink-soft hover:bg-raised md:hidden" aria-label="Buka menu">
             <MenuIcon />
           </button>
-          <h2 className="min-w-0 flex-1 truncate text-sm font-medium">{active?.title || '9router Chat'}</h2>
+          <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight">
+            {workspace === 'excel' ? 'Excel' : active?.title || 'Percakapan baru'}
+          </h2>
 
-          <button disabled={busy} onClick={() => setWorkspace(workspace === 'chat' ? 'excel' : 'chat')} className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm disabled:opacity-40 dark:border-zinc-700">{workspace === 'chat' ? 'Excel' : 'Chat'}</button>
-
-          <input
-            list="model-list"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder="Model"
-            className="w-36 rounded-lg border border-zinc-300 bg-transparent px-2 py-1.5 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 sm:w-56"
-          />
+          <label className="flex items-center gap-2 rounded-full border border-line-strong bg-sheet py-1.5 pl-3 pr-3.5 transition focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/15">
+            <ModelIcon width={16} height={16} className="shrink-0 text-brand-strong" />
+            <span className="sr-only">Model</span>
+            <input
+              list="model-list"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="Pilih model"
+              className="w-28 bg-transparent text-[13px] font-semibold outline-none placeholder:font-medium placeholder:text-ink-faint focus-visible:outline-none sm:w-52"
+            />
+          </label>
           <datalist id="model-list">{models.map((m) => <option key={m} value={m} />)}</datalist>
-
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="rounded-lg p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            aria-label="Ganti tema"
-          >
-            {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
-          </button>
         </header>
 
         {notice && (
-          <div role="status" className="flex items-start gap-2 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <div role="status" className={noticeBar}>
+            <AlertIcon width={16} height={16} className="mt-0.5 shrink-0" />
             <span className="flex-1">{notice}</span>
-            <button onClick={() => setNotice('')} aria-label="Tutup"><XIcon width={16} height={16} /></button>
+            <button onClick={() => setNotice('')} aria-label="Tutup pemberitahuan" className="rounded p-0.5 hover:bg-signal/20"><XIcon width={16} height={16} /></button>
           </div>
         )}
-        {capability?.warning && <div role="status" className="border-b border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">{capability.warning} <button className="underline" onClick={() => setWorkspace('excel')}>Buka Excel fallback</button></div>}
+        {capability?.warning && (
+          <div role="status" className={noticeBar}>
+            <AlertIcon width={16} height={16} className="mt-0.5 shrink-0" />
+            <span className="flex-1">{capability.warning} <button className="font-semibold underline underline-offset-2" onClick={() => setWorkspace('excel')}>Buka Excel fallback</button></span>
+          </div>
+        )}
 
         {workspace === 'excel' ? <ExcelWorkspace model={model} /> : <>
-          <MessageList messages={active?.messages || []} busy={busy} onRetry={retry} />
+          <MessageList messages={active?.messages || []} busy={busy} onRetry={retry} onPick={(text) => setSeed({ text, n: Date.now() })} />
           <WorkspaceFiles conversationId={activeId} busy={busy} />
-          <Composer busy={busy || !loaded} onSend={send} onStop={stop} />
+          <Composer busy={busy || !loaded} onSend={send} onStop={stop} seed={seed} />
         </>}
       </main>
     </div>

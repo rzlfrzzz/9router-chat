@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>9router Chat</title>
+    <meta name="theme-color" content="#E8EEF2" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#06121C" media="(prefers-color-scheme: dark)" />
     <script>
       try {
         var t = localStorage.getItem('theme') ||
@@ -12,7 +14,7 @@
       } catch (e) {}
     </script>
   </head>
-  <body class="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
